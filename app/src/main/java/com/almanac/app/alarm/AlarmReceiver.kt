@@ -70,11 +70,11 @@ class AlarmReceiver : BroadcastReceiver() {
             label.isNotBlank() -> label
             else -> "Alarm · $now"
         }
-        val text = if (kind == KIND_TIMER) "Your timer has finished." else "It's $now. Rise gently."
+        val text = if (kind == KIND_TIMER) "Your timer has finished." else "It's $now."
 
         val builder = Notification.Builder(context, AlarmScheduler.CHANNEL)
-            .setSmallIcon(R.drawable.ic_stat_moon)
-            .setColor(0xFFB8553A.toInt())
+            .setSmallIcon(R.drawable.ic_stat_almanac)
+            .setColor(0xFFE0401B.toInt())
             .setContentTitle(title)
             .setContentText(text)
             .setCategory(Notification.CATEGORY_ALARM)

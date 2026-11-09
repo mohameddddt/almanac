@@ -16,7 +16,10 @@ import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.PI
 
-/** Current time, refreshed every [periodMs] and aligned to the period boundary. */
+/**
+ * Current time, refreshed every [periodMs] and aligned to the period boundary.
+ * Read it in the smallest composable that needs it — whoever reads it recomposes on every tick.
+ */
 @Composable
 fun rememberNow(periodMs: Long = 1000L): LocalDateTime {
     var now by remember { mutableStateOf(LocalDateTime.now()) }
@@ -29,13 +32,29 @@ fun rememberNow(periodMs: Long = 1000L): LocalDateTime {
     return now
 }
 
+/** Today's date; only changes at midnight, so screens built on it stay still. */
+@Composable
+fun rememberToday(): LocalDate {
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000 - System.currentTimeMillis() % 60_000)
+            val d = LocalDate.now()
+            if (d != today) today = d
+        }
+    }
+    return today
+}
+
 object Fmt {
     val time: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-    val monthYear: DateTimeFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
     val dayMonth: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM")
+    val longDate: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM yyyy")
     val shortDay: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM")
+    val shortDate: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM")
 
     fun weekday(d: LocalDate) = d.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
+    fun weekdayShort(d: LocalDate) = d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
 
     fun relative(d: LocalDate, today: LocalDate = LocalDate.now()): String = when (d) {
         today -> "Today"
@@ -44,13 +63,16 @@ object Fmt {
         else -> d.format(shortDay)
     }
 
-    fun greeting(hour: Int) = when (hour) {
-        in 5..11 -> "Good morning"
-        in 12..16 -> "Good afternoon"
-        in 17..21 -> "Good evening"
-        else -> "Quiet hours"
+    fun period(hour: Int) = when (hour) {
+        in 5..11 -> "Morning"
+        in 12..16 -> "Afternoon"
+        in 17..21 -> "Evening"
+        else -> "Night"
     }
 }
+
+/** Mood levels, 1–5, written plainly. */
+val MoodWords = listOf("Low", "Flat", "Fine", "Good", "Great")
 
 /** Lunar phase computed from the mean synodic month — accurate to within a day, no network needed. */
 object Moon {

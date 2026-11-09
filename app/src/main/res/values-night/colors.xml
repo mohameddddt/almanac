@@ -1,0 +1,4 @@
+<resources>
+    <!-- window background before Compose draws, so dark mode doesn't flash white -->
+    <color name="paper">#111111</color>
+</resources>

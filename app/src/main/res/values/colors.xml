@@ -1,5 +1,5 @@
 <resources>
-    <color name="paper">#F3EDE2</color>
-    <color name="ink">#22262A</color>
-    <color name="terracotta">#B8553A</color>
+    <color name="paper">#F3F2EE</color>
+    <color name="ink">#121212</color>
+    <color name="signal">#E0401B</color>
 </resources>

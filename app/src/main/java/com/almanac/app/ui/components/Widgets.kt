@@ -9,30 +9,26 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -40,139 +36,204 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.almanac.app.ui.theme.LocalPalette
+import com.almanac.app.ui.theme.Type
 import java.time.LocalDate
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.PI
 
 val p @Composable get() = LocalPalette.current
 
-/** Small-caps section heading followed by a hairline rule. */
+/** Plain ripple-free click: print doesn't ripple. */
 @Composable
-fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: (@Composable () -> Unit)? = null) {
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(text.uppercase(), style = MaterialTheme.typography.labelMedium)
-        Spacer(Modifier.width(12.dp))
-        Box(Modifier.weight(1f).height(1.dp).background(p.line))
-        if (trailing != null) {
-            Spacer(Modifier.width(12.dp))
-            trailing()
+fun Modifier.tap(enabled: Boolean = true, onClick: () -> Unit): Modifier =
+    clickable(remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = onClick)
+
+@Composable
+fun Rule(modifier: Modifier = Modifier, color: Color = p.rule, thickness: Dp = 1.dp) {
+    Box(modifier.fillMaxWidth().height(thickness).background(color))
+}
+
+/** Heavy-over-light double rule, as under a newspaper masthead. */
+@Composable
+fun DoubleRule(modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth()) {
+        Rule(color = p.ink, thickness = 2.dp)
+        Spacer(Modifier.height(3.dp))
+        Rule(color = p.ink, thickness = 1.dp)
+    }
+}
+
+/** Numbered section head: `02  AGENDA ............ 3` over an ink rule. */
+@Composable
+fun SectionHead(index: String, title: String, modifier: Modifier = Modifier, trailing: String? = null) {
+    Column(modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(bottom = 6.dp)) {
+            Text(index, style = Type.tag, color = p.signal)
+            Spacer(Modifier.width(10.dp))
+            Text(title.uppercase(), style = Type.tag, color = p.ink, modifier = Modifier.weight(1f))
+            if (trailing != null) Text(trailing, style = Type.tag, color = p.muted)
+        }
+        Rule(color = p.ink)
+    }
+}
+
+/** Screen title block: big condensed word, a line of mono metadata, a double rule. */
+@Composable
+fun Masthead(title: String, meta: String, modifier: Modifier = Modifier, actions: @Composable RowScope.() -> Unit = {}) {
+    Column(modifier.fillMaxWidth().padding(top = 12.dp)) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(title.uppercase(), style = MaterialTheme.typography.displayLarge, modifier = Modifier.weight(1f))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), content = actions)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(meta.uppercase(), style = Type.tag, color = p.muted)
+        Spacer(Modifier.height(10.dp))
+        DoubleRule()
+    }
+}
+
+/** A row in a ledger: fixed-width mono lead column, content, optional trailing; hairline below. */
+@Composable
+fun LedgerRow(
+    lead: String,
+    modifier: Modifier = Modifier,
+    leadColor: Color = p.muted,
+    leadWidth: Dp = 64.dp,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Column(modifier.fillMaxWidth().then(if (onClick != null) Modifier.tap(onClick = onClick) else Modifier)) {
+        Row(Modifier.padding(vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(lead.uppercase(), style = Type.data, color = leadColor, modifier = Modifier.width(leadWidth))
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, content = content)
+            trailing?.invoke()
+        }
+        Rule()
+    }
+}
+
+/** Square ballot box. Checked boxes fill with [color] and carry a drawn tick. */
+@Composable
+fun BallotBox(checked: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier, color: Color = p.ink, size: Dp = 22.dp, label: String? = null) {
+    val fill by animateColorAsState(if (checked) color else Color.Transparent, label = "ballot")
+    val tick = p.paper
+    Box(
+        modifier
+            .size(size)
+            .background(fill)
+            .border(1.5.dp, color)
+            .tap(onClick = onToggle),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (checked) {
+            Canvas(Modifier.size(size * 0.55f)) {
+                val path = Path().apply {
+                    moveTo(0f, this@Canvas.size.height * 0.55f)
+                    lineTo(this@Canvas.size.width * 0.38f, this@Canvas.size.height * 0.9f)
+                    lineTo(this@Canvas.size.width, this@Canvas.size.height * 0.1f)
+                }
+                drawPath(path, tick, style = Stroke(2.dp.toPx(), cap = StrokeCap.Square, join = StrokeJoin.Miter))
+            }
+        } else if (label != null) {
+            Text(label, style = Type.tag, color = p.muted)
         }
     }
 }
 
+/** Equal-width options in a ruled box; the chosen one is set solid. */
 @Composable
-fun PaperCard(
-    modifier: Modifier = Modifier,
-    color: Color = p.card,
-    padding: Dp = 20.dp,
-    onClick: (() -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Column(
-        modifier
-            .clip(RoundedCornerShape(26.dp))
-            .background(color)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(padding),
-        content = content,
-    )
-}
-
-@Composable
-fun Dot(color: Color, size: Dp = 8.dp, modifier: Modifier = Modifier) {
-    Box(modifier.size(size).clip(CircleShape).background(color))
-}
-
-/** Outlined capsule chip. */
-@Composable
-fun Chip(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    accent: Color = p.ink,
-    leading: (@Composable () -> Unit)? = null,
-) {
-    val bg by animateColorAsState(if (selected) accent else Color.Transparent, label = "chip")
-    val fg by animateColorAsState(if (selected) p.paper else p.inkSoft, label = "chipText")
+fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier
-            .clip(CircleShape)
-            .background(bg)
-            .border(1.dp, if (selected) accent else p.line, CircleShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .border(1.dp, p.ink),
     ) {
-        leading?.invoke()
-        Text(text, style = MaterialTheme.typography.labelLarge, color = fg)
+        options.forEachIndexed { i, label ->
+            if (i > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(p.ink))
+            val on = i == selected
+            Box(
+                Modifier
+                    .weight(1f)
+                    .background(if (on) p.ink else Color.Transparent)
+                    .tap { onSelect(i) }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label.uppercase(), style = Type.tag, color = if (on) p.paper else p.ink, textAlign = TextAlign.Center, maxLines = 1)
+            }
+        }
     }
 }
 
-@Composable
-fun RoundIcon(
-    icon: ImageVector,
-    contentDescription: String?,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    container: Color = p.ink,
-    tint: Color = p.paper,
-    size: Dp = 48.dp,
-) {
-    Box(
-        modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(container)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(color = tint),
-                onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription, tint = tint, modifier = Modifier.size(size * 0.46f))
-    }
-}
-
-/** Large ink button used for primary actions in sheets. */
+/** Solid rectangular button with a mono label. */
 @Composable
 fun InkButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, color: Color = p.ink) {
     Box(
         modifier
-            .clip(CircleShape)
-            .background(if (enabled) color else p.line)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 14.dp),
+            .background(if (enabled) color else p.shade)
+            .tap(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 22.dp, vertical = 14.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge, color = if (enabled) p.paper else p.muted)
+        Text(text.uppercase(), style = MaterialTheme.typography.labelLarge, color = if (enabled) p.paper else p.muted)
     }
 }
 
+/** Outlined rectangular button. */
 @Composable
-fun GhostButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, color: Color = p.inkSoft) {
+fun FrameButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, color: Color = p.ink) {
     Box(
         modifier
-            .clip(CircleShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 14.dp),
+            .border(1.dp, color)
+            .tap(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 13.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge, color = color)
+        Text(text.uppercase(), style = MaterialTheme.typography.labelLarge, color = color)
     }
 }
 
-/** A quiet text field: no box, just text over a hairline. */
+/** Bare mono text action. */
+@Composable
+fun TextAction(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, color: Color = p.inkSoft) {
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelLarge,
+        color = color,
+        modifier = modifier.tap(onClick = onClick).padding(horizontal = 12.dp, vertical = 14.dp),
+    )
+}
+
+/** Square on/off switch. */
+@Composable
+fun SquareToggle(on: Boolean, onChange: (Boolean) -> Unit) {
+    val track by animateColorAsState(if (on) p.signal else Color.Transparent, label = "track")
+    Row(
+        Modifier
+            .width(46.dp)
+            .height(24.dp)
+            .background(track)
+            .border(1.5.dp, if (on) p.signal else p.ink)
+            .tap { onChange(!on) }
+            .padding(3.dp),
+        horizontalArrangement = if (on) Arrangement.End else Arrangement.Start,
+    ) {
+        Box(Modifier.size(18.dp).background(if (on) p.paper else p.ink))
+    }
+}
+
+/** A quiet text field: text over a hairline, no box. */
 @Composable
 fun LineField(
     value: String,
@@ -183,15 +244,14 @@ fun LineField(
     singleLine: Boolean = true,
     onDone: (() -> Unit)? = null,
 ) {
-    val style = (if (large) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyLarge)
-        .copy(color = p.ink)
+    val style = (if (large) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyLarge).copy(color = p.ink)
     Column(modifier) {
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
             textStyle = style,
             singleLine = singleLine,
-            cursorBrush = SolidColor(p.terracotta),
+            cursorBrush = SolidColor(p.signal),
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.Sentences,
                 imeAction = if (singleLine) ImeAction.Done else ImeAction.Default,
@@ -205,34 +265,34 @@ fun LineField(
                 }
             },
         )
-        Box(Modifier.fillMaxWidth().height(1.dp).background(p.line))
+        Rule(color = p.ink)
     }
 }
 
-/** Row of swatches for picking an accent tint. */
+/** Ink swatches for marking events and rituals. */
 @Composable
-fun TintPicker(selected: Int, onSelect: (Int) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        p.tints.forEachIndexed { i, c ->
+fun InkPicker(selected: Int, onSelect: (Int) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        p.inks.forEachIndexed { i, c ->
             Box(
                 Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .border(2.dp, if (i == selected) p.ink else Color.Transparent, CircleShape)
+                    .size(28.dp)
+                    .border(1.5.dp, if (i == selected) p.ink else Color.Transparent)
                     .padding(4.dp)
-                    .clip(CircleShape)
                     .background(c)
-                    .clickable { onSelect(i) },
+                    .tap { onSelect(i) },
             )
         }
     }
 }
 
-/** A drawn moon showing the real phase for [date]. */
+/** The moon for [date], drawn in ink on paper. */
 @Composable
 fun MoonGlyph(date: LocalDate, size: Dp, modifier: Modifier = Modifier) {
-    val lit = p.brass
-    val shadow = if (p.isDark) Color(0xFF2B3036) else Color(0xFFD9CEBB)
+    // printed convention: the dark part is inked; in dark mode the light part is
+    val lit = if (p.isDark) p.ink else p.paper
+    val shadow = if (p.isDark) p.shade else p.ink
+    val outline = p.ink
     val f = Moon.fraction(date)
     Canvas(modifier.size(size)) {
         val r = this.size.minDimension / 2
@@ -240,61 +300,26 @@ fun MoonGlyph(date: LocalDate, size: Dp, modifier: Modifier = Modifier) {
         drawCircle(shadow, r, c)
         val k = cos(2 * PI * f).toFloat() // 1 new, -1 full
         val waxing = f < 0.5
-        // lit half-disc on the side the sun is on
         val half = Path().apply {
             addArc(Rect(c, r), if (waxing) -90f else 90f, 180f)
             close()
         }
         drawPath(half, lit)
-        // terminator ellipse: shadow for crescents, light for gibbous
         val w = abs(k) * r
-        drawOval(
-            color = if (k > 0) shadow else lit,
-            topLeft = Offset(c.x - w, c.y - r),
-            size = Size(w * 2, r * 2),
-        )
-        drawCircle(lit.copy(alpha = 0.35f), r, c, style = Stroke(1.dp.toPx()))
+        drawOval(if (k > 0) shadow else lit, Offset(c.x - w, c.y - r), Size(w * 2, r * 2))
+        drawCircle(outline, r, c, style = Stroke(1.dp.toPx()))
     }
 }
 
-/** Thin circular progress ring with a rounded cap. */
+/** Thin progress line. */
 @Composable
-fun Ring(progress: Float, color: Color, modifier: Modifier = Modifier, track: Color = p.line, stroke: Dp = 6.dp) {
-    Canvas(modifier) {
-        val s = stroke.toPx()
-        val inset = s / 2
-        val arcSize = Size(size.width - s, size.height - s)
-        drawArc(track, 0f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(s))
-        drawArc(color, -90f, 360f * progress.coerceIn(0f, 1f), false, Offset(inset, inset), arcSize, style = Stroke(s, cap = StrokeCap.Round))
-    }
-}
-
-/** Thin horizontal progress bar. */
-@Composable
-fun Bar(progress: Float, color: Color, modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(p.line)) {
-        Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).height(4.dp).clip(CircleShape).background(color))
+fun Meter(progress: Float, color: Color, modifier: Modifier = Modifier, thickness: Dp = 3.dp) {
+    Box(modifier.fillMaxWidth().height(thickness).background(p.rule)) {
+        Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).height(thickness).background(color))
     }
 }
 
 @Composable
-fun ScreenTitle(kicker: String, title: String, modifier: Modifier = Modifier, actions: @Composable RowScope.() -> Unit = {}) {
-    Row(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 18.dp), verticalAlignment = Alignment.Bottom) {
-        Column(Modifier.weight(1f)) {
-            Text(kicker.uppercase(), style = MaterialTheme.typography.labelMedium, color = p.terracotta)
-            Spacer(Modifier.height(4.dp))
-            Text(title, style = MaterialTheme.typography.displaySmall)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), content = actions)
-    }
-}
-
-@Composable
-fun EmptyNote(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        style = MaterialTheme.typography.bodyMedium.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
-        color = p.muted,
-        modifier = modifier.padding(vertical = 14.dp),
-    )
+fun Blank(text: String, modifier: Modifier = Modifier) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = modifier.padding(vertical = 14.dp))
 }

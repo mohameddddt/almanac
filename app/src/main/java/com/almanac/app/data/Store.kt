@@ -12,6 +12,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Everything lives in one small JSON file in the app's private storage.
@@ -37,14 +38,22 @@ object Store {
 
     fun newId(): Long = System.nanoTime()
 
+    /** Latest state waiting to be written; null when the disk is up to date. */
+    private val pending = AtomicReference<AppData?>(null)
+
     fun edit(transform: (AppData) -> AppData) {
         _data.update(transform)
-        val snapshot = encode(_data.value).toString()
-        writer.execute {
-            val tmp = File(file.parentFile, "almanac.json.tmp")
-            tmp.writeText(snapshot)
-            tmp.renameTo(file)
-        }
+        // Only schedule a write if none is queued; a queued write always picks up the newest state,
+        // so a burst of edits (typing a note) costs one serialization, not one per keystroke.
+        if (pending.getAndSet(_data.value) == null) writer.execute(::flush)
+    }
+
+    private fun flush() {
+        val snapshot = pending.getAndSet(null) ?: return
+        val json = encode(snapshot).toString()
+        val tmp = File(file.parentFile, "almanac.json.tmp")
+        tmp.writeText(json)
+        tmp.renameTo(file)
     }
 
     // ---- tasks ----
@@ -101,15 +110,15 @@ object Store {
         val today = LocalDate.now()
         return AppData(
             tasks = listOf(
-                Task(1, "Tap the circle to finish a task", priority = Priority.High, due = today),
-                Task(2, "Swipe a task away to delete it", due = today),
-                Task(3, "Plan something nice for the weekend", priority = Priority.Low),
+                Task(1, "Tick the box to finish a task", priority = Priority.High, due = today),
+                Task(2, "Swipe sideways to delete", due = today),
+                Task(3, "Plan the weekend", priority = Priority.Low),
             ),
-            events = listOf(Event(4, "Coffee with a friend", today.plusDays(2), LocalTime.of(10, 30), tint = 1)),
+            events = listOf(Event(4, "Coffee with Sam", today.plusDays(2), LocalTime.of(10, 30), tint = 1)),
             habits = listOf(
-                Habit(5, "Read 20 pages", 0),
-                Habit(6, "Walk outside", 1),
-                Habit(7, "Drink water", 2),
+                Habit(5, "Read", 0),
+                Habit(6, "Walk", 1),
+                Habit(7, "Stretch", 2),
             ),
         )
     }
